@@ -1,3 +1,54 @@
+import torch
+import torch.nn as nn
+from torchvision import models
+
+# Class counts
+SHAPE_ATTR_CLASSES = {
+    "sleeve_length": 6,
+    "lower_length": 5,
+    "socks": 4,
+    "hat": 3,
+    "glasses": 5,
+    "neckwear": 3,
+    "wrist_wear": 3,
+    "ring": 3,
+    "waist_acc": 5,
+    "neckline": 7,
+    "outer": 3,
+    "covers_navel": 3
+}
+FABRIC_CLASSES = 8
+PATTERN_CLASSES = 8
+
+# Model
+class FashionRecognitionModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        base = models.resnet50(pretrained=True)
+        self.backbone = nn.Sequential(*list(base.children())[:-2])
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.flat = nn.Flatten()
+
+        self.shape_heads = nn.ModuleList([
+            nn.Linear(2048, SHAPE_ATTR_CLASSES[key]) for key in SHAPE_ATTR_CLASSES
+        ])
+        self.fabric_heads = nn.ModuleList([
+            nn.Linear(2048, FABRIC_CLASSES) for _ in range(3)  # upper, lower, outer
+        ])
+        self.pattern_heads = nn.ModuleList([
+            nn.Linear(2048, PATTERN_CLASSES) for _ in range(3)
+        ])
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.pool(x)
+        x = self.flat(x)
+        shape_out = [head(x) for head in self.shape_heads]
+        fabric_out = [head(x) for head in self.fabric_heads]
+        pattern_out = [head(x) for head in self.pattern_heads]
+        return {'shape': shape_out, 'fabric': fabric_out, 'pattern': pattern_out}
+
+# Prediction function
 def predict(model, image_tensor):
     model.eval()
     with torch.no_grad():
